@@ -4,9 +4,66 @@
 
 ---
 
-## ❌ PROBLÈME ACTUEL : Variables d'Environnement Redis Manquantes
+## ❌ PROBLÈME ACTUEL : Docker Build Bloqué par Firewall Entreprise
 
 ### Erreur
+```
+Unable to connect to deb.debian.org:http: [IP: 199.232.170.132 80]
+E: Unable to fetch some archives, maybe run apt-get update or try with --fix-missing?
+ERROR: failed to solve: process "/bin/sh -c apt-get update && apt-get install -y build-essential wget git" did not complete successfully: exit code: 100
+```
+
+### Cause
+Le firewall de l'entreprise bloque l'accès aux dépôts Debian (deb.debian.org) lors du build Docker. Le Dockerfile.prod essaie d'installer `build-essential`, `wget`, et `git` mais ne peut pas télécharger les paquets.
+
+### 🎯 Solution : Utiliser l'Image Existante (Recommandé)
+
+**Bonne nouvelle** : Vous avez DÉJÀ une image Docker qui fonctionne de votre premier build réussi ! Au lieu de rebuild, utilisez simplement cette image.
+
+**Action requise** :
+```cmd
+cd C:\Users\elhadsey\OneDrive - myidemia\Bureau\irp
+
+REM Étape 1 : Vérifier si l'image existe
+docker images | findstr rag-system
+
+REM Si l'image existe, récupérer les dernières modifications du compose
+git pull origin main
+
+REM Étape 2 : Démarrer directement les containers (sans rebuild!)
+docker-compose -f docker-compose.prod.yml up -d
+
+REM Étape 3 : Attendre 2 minutes
+timeout /t 120
+
+REM Étape 4 : Tester l'interface
+start http://localhost:8501
+```
+
+### 🔄 Solutions Alternatives (Si Image Absente)
+
+**Option A - Build sur Réseau Personnel** :
+- Connecter le PC à un réseau sans restrictions (hotspot mobile)
+- Lancer le build
+
+**Option B - Image Pré-Construite** :
+- Builder l'image sur un PC personnel
+- Exporter : `docker save rag-system:prod -o rag-system.tar`
+- Transférer via clé USB
+- Importer : `docker load -i rag-system.tar`
+
+**Option C - Proxy Entreprise** (si disponible) :
+```dockerfile
+# Ajouter avant apt-get dans Dockerfile.prod
+ENV HTTP_PROXY=http://proxy-entreprise:port
+ENV HTTPS_PROXY=http://proxy-entreprise:port
+```
+
+---
+
+## ✅ Problème Résolu : Variables d'Environnement Redis Manquantes
+
+### Erreur (résolue)
 ```
 redis.exceptions.ConnectionError: Error 111 connecting to 127.0.0.1:6379. Connection refused.
 ```
@@ -14,28 +71,8 @@ redis.exceptions.ConnectionError: Error 111 connecting to 127.0.0.1:6379. Connec
 ### Cause
 Les variables d'environnement `REDIS_HOST` et `REDIS_PORT` n'étaient pas définies pour le service Streamlit dans docker-compose.prod.yml
 
-### ✅ Solution : Redémarrer les Containers
-Les variables ont été ajoutées. **Pas besoin de rebuild**, juste redémarrer.
-
-**Action requise** :
-```cmd
-cd C:\Users\elhadsey\OneDrive - myidemia\Bureau\irp
-
-REM Arrêter tous les containers
-docker-compose -f docker-compose.prod.yml down
-
-REM Récupérer la version corrigée
-git pull origin main
-
-REM Redémarrer (pas de rebuild nécessaire!)
-docker-compose -f docker-compose.prod.yml up -d
-
-REM Attendre 2 minutes
-timeout /t 120
-
-REM Tester l'interface
-start http://localhost:8501
-```
+### Solution Appliquée
+Variables ajoutées dans docker-compose.prod.yml (lignes 146-147). **Pas besoin de rebuild**, juste redémarrer les containers.
 
 ---
 
@@ -188,6 +225,11 @@ docker system prune -af --volumes
 
 ### ✅ Problème 10 : Streamlit ne peut pas joindre Redis
 **Solution** : Ajouter variables REDIS_HOST et REDIS_PORT dans docker-compose.prod.yml pour Streamlit
+
+### ❌ Problème 11 : Docker Build Bloqué par Firewall (ACTUEL)
+**Cause** : Firewall entreprise bloque deb.debian.org lors du `apt-get install`
+**Solution recommandée** : Utiliser l'image existante du premier build réussi (pas besoin de rebuild)
+**Solutions alternatives** : Build sur réseau personnel, exporter/importer image, ou configurer proxy
 
 ---
 
