@@ -4,43 +4,116 @@
 
 ---
 
-## ❌ PROBLÈME ACTUEL : Docker Build Bloqué par Firewall Entreprise
+## ❌ PROBLÈME ACTUEL : Image Docker Supprimée + Firewall Bloque Rebuild
 
-### Erreur
+### Diagnostic
+```cmd
+docker images | findstr rag-system
+REM → Aucun résultat (image supprimée avec les containers)
+
+docker-compose -f docker-compose.prod.yml up -d
+REM → Error: pull access denied for rag-system (image n'existe ni localement ni sur Docker Hub)
 ```
-Unable to connect to deb.debian.org:http: [IP: 199.232.170.132 80]
-E: Unable to fetch some archives, maybe run apt-get update or try with --fix-missing?
-ERROR: failed to solve: process "/bin/sh -c apt-get update && apt-get install -y build-essential wget git" did not complete successfully: exit code: 100
-```
 
-### Cause
-Le firewall de l'entreprise bloque l'accès aux dépôts Debian (deb.debian.org) lors du build Docker. Le Dockerfile.prod essaie d'installer `build-essential`, `wget`, et `git` mais ne peut pas télécharger les paquets.
+### Situation
+1. **Image `rag-system:prod` supprimée** lors du nettoyage Docker
+2. **Firewall bloque rebuild** : `Unable to connect to deb.debian.org:http`
+3. **Impossible de démarrer** sans rebuilder l'image
 
-### 🎯 Solution : Utiliser l'Image Existante (Recommandé)
+### 🎯 Solutions Disponibles
 
-**Bonne nouvelle** : Vous avez DÉJÀ une image Docker qui fonctionne de votre premier build réussi ! Au lieu de rebuild, utilisez simplement cette image.
+**OPTION 1 - Hotspot Mobile (RECOMMANDÉ)** ⭐
 
-**Action requise** :
+Le firewall bloque seulement le réseau entreprise. Utilisez le hotspot de votre téléphone :
+
 ```cmd
 cd C:\Users\elhadsey\OneDrive - myidemia\Bureau\irp
 
-REM Étape 1 : Vérifier si l'image existe
-docker images | findstr rag-system
+REM Étape 1 : Connecter votre PC au hotspot de votre téléphone
 
-REM Si l'image existe, récupérer les dernières modifications du compose
-git pull origin main
+REM Étape 2 : Vérifier que les modèles sont présents
+dir models
+REM Doit afficher : all-mpnet-base-v2\ et Llama-3.2-3B-Instruct-Q5_K_L.gguf
 
-REM Étape 2 : Démarrer directement les containers (sans rebuild!)
+REM Étape 3 : Switcher les .dockerignore (pour inclure models/)
+ren .dockerignore .dockerignore.dev
+ren .dockerignore.prod .dockerignore
+
+REM Étape 4 : Builder l'image (prend 10-15 min)
+docker build -f Dockerfile.prod -t rag-system:prod .
+
+REM Étape 5 : Restaurer les .dockerignore
+ren .dockerignore .dockerignore.prod
+ren .dockerignore.dev .dockerignore
+
+REM Étape 6 : Créer .env
+copy .env.example .env
+
+REM Étape 7 : Démarrer tous les services
 docker-compose -f docker-compose.prod.yml up -d
 
-REM Étape 3 : Attendre 2 minutes
+REM Étape 8 : Attendre 2 minutes
 timeout /t 120
 
-REM Étape 4 : Tester l'interface
+REM Étape 9 : Tester
 start http://localhost:8501
 ```
 
-### 🔄 Solutions Alternatives (Si Image Absente)
+---
+
+**OPTION 2 - Builder sur PC Personnel et Transférer**
+
+Si vous avez accès à votre PC personnel sans restrictions réseau :
+
+**Sur PC personnel** :
+```cmd
+REM 1. Cloner le repo
+git clone https://github.com/Babou001/irp.git
+cd irp
+
+REM 2. Télécharger les modèles (voir MODELS_README.md)
+pip install huggingface-hub
+
+REM Modèle embeddings
+python -c "from huggingface_hub import snapshot_download; snapshot_download(repo_id='sentence-transformers/all-mpnet-base-v2', local_dir='./models/all-mpnet-base-v2')"
+
+REM Modèle LLM
+huggingface-cli download bartowski/Llama-3.2-3B-Instruct-GGUF Llama-3.2-3B-Instruct-Q5_K_L.gguf --local-dir ./models --local-dir-use-symlinks False
+
+REM 3. Switcher .dockerignore
+ren .dockerignore .dockerignore.dev
+ren .dockerignore.prod .dockerignore
+
+REM 4. Builder l'image
+docker build -f Dockerfile.prod -t rag-system:prod .
+
+REM 5. Exporter l'image (fichier ~6-7 GB)
+docker save rag-system:prod -o rag-system-prod.tar
+
+REM 6. Copier rag-system-prod.tar sur clé USB
+```
+
+**Sur PC entreprise** :
+```cmd
+cd C:\Users\elhadsey\OneDrive - myidemia\Bureau\irp
+
+REM 1. Copier le fichier .tar depuis la clé USB
+REM 2. Importer l'image (prend 2-3 min)
+docker load -i rag-system-prod.tar
+
+REM 3. Vérifier
+docker images | findstr rag-system
+
+REM 4. Démarrer
+copy .env.example .env
+docker-compose -f docker-compose.prod.yml up -d
+timeout /t 120
+start http://localhost:8501
+```
+
+---
+
+### 🔄 Solutions Alternatives (Moins Recommandées)
 
 **Option A - Build sur Réseau Personnel** :
 - Connecter le PC à un réseau sans restrictions (hotspot mobile)
@@ -228,8 +301,10 @@ docker system prune -af --volumes
 
 ### ❌ Problème 11 : Docker Build Bloqué par Firewall (ACTUEL)
 **Cause** : Firewall entreprise bloque deb.debian.org lors du `apt-get install`
-**Solution recommandée** : Utiliser l'image existante du premier build réussi (pas besoin de rebuild)
-**Solutions alternatives** : Build sur réseau personnel, exporter/importer image, ou configurer proxy
+**Aggravation** : Image `rag-system:prod` supprimée lors du nettoyage → Rebuild obligatoire
+**Solutions recommandées** :
+1. Build via hotspot mobile (plus rapide)
+2. Build sur PC perso + export/import via clé USB (plus fiable)
 
 ---
 
