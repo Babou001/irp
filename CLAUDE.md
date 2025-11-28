@@ -4,34 +4,54 @@
 
 ---
 
-## ❌ PROBLÈME ACTUEL : Port 9000 Déjà Utilisé
+## ❌ PROBLÈME ACTUEL : Module Streamlit Manquant + URL API Incorrecte
 
-### Erreur
+### Erreur 1
 ```
-Error response from daemon: Ports are not available: exposing port TCP 0.0.0.0:9000
-bind: Only one usage of each socket address (protocol/network address/port) is normally permitted.
+ModuleNotFoundError: No module named 'streamlit_cookies_manager'
+```
+
+### Erreur 2
+```
+Connection refused: Failed to establish a new connection to 127.0.0.1:8000
 ```
 
 ### Cause
-Le port 9000 (utilisé par Minio) est déjà occupé par un autre processus sur votre PC.
+1. Le module `streamlit-cookies-manager` manquait dans requirements.txt
+2. Streamlit essayait de se connecter à `127.0.0.1:8000` au lieu de `rag-fastapi:8000` (nom du service Docker)
 
-### ✅ Solution : Ports Changés
-Les ports Minio ont été modifiés dans docker-compose.prod.yml :
-- Port 9000 → **9002**
-- Port 9001 → **9003**
+### ✅ Solution : Rebuild l'Image
+Les fichiers ont été corrigés. **Il faut rebuild l'image Docker** pour inclure les modifications.
 
 **Action requise** :
 ```cmd
 cd C:\Users\elhadsey\OneDrive - myidemia\Bureau\irp
 
-REM Arrêter les containers partiellement démarrés
+REM Arrêter tous les containers
 docker-compose -f docker-compose.prod.yml down
 
 REM Récupérer la version corrigée
 git pull origin main
 
-REM Relancer le démarrage
+REM Switcher les .dockerignore
+ren .dockerignore .dockerignore.dev
+ren .dockerignore.prod .dockerignore
+
+REM Rebuild l'image (important!)
+docker build -f Dockerfile.prod -t rag-system:prod .
+
+REM Restaurer les .dockerignore
+ren .dockerignore .dockerignore.prod
+ren .dockerignore.dev .dockerignore
+
+REM Redémarrer
 docker-compose -f docker-compose.prod.yml up -d
+
+REM Attendre 2 minutes
+timeout /t 120
+
+REM Tester
+curl http://localhost:8501
 ```
 
 ---
@@ -176,6 +196,12 @@ docker system prune -af --volumes
 
 ### ✅ Problème 7 : Port 9000 déjà utilisé
 **Solution** : Changer ports Minio dans docker-compose.prod.yml (9000→9002, 9001→9003)
+
+### ✅ Problème 8 : streamlit-cookies-manager manquant
+**Solution** : Ajouter `streamlit-cookies-manager` à requirements.txt
+
+### ✅ Problème 9 : Streamlit ne peut pas joindre FastAPI
+**Solution** : Utiliser variable d'environnement FASTAPI_URL avec nom du service Docker (rag-fastapi:8000)
 
 ---
 
