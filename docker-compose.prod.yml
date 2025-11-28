@@ -143,6 +143,8 @@ services:
         condition: service_healthy
     environment:
       - FASTAPI_URL=http://rag-fastapi:8000
+      - REDIS_HOST=rag-redis
+      - REDIS_PORT=6379
       - MILVUS_HOST=milvus-standalone
       - MILVUS_PORT=19530
     volumes:
