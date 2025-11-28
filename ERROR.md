@@ -1,113 +1,138 @@
-C:\Users\elhadsey\OneDrive - myidemia\Bureau\irp>dir
- Volume in drive C is Windows
- Volume Serial Number is AC97-4896
-
- Directory of C:\Users\elhadsey\OneDrive - myidemia\Bureau\irp
-
-11/28/2025  01:01 PM    <DIR>          .
-11/28/2025  11:43 AM    <DIR>          ..
-11/28/2025  11:43 AM             1,105 .dockerignore
-11/28/2025  11:43 AM             1,401 .dockerignore.prod
-11/28/2025  11:43 AM               776 .env.example
-11/28/2025  11:43 AM             2,261 .gitignore
-11/28/2025  12:26 PM    <DIR>          .streamlit
-11/28/2025  11:43 AM             6,338 docker-compose.prod.yml
-11/28/2025  11:43 AM             5,561 docker-compose.yml
-11/28/2025  11:43 AM             1,783 Dockerfile
-11/28/2025  11:43 AM             3,398 Dockerfile.prod
-11/28/2025  11:46 AM    <DIR>          docs
-11/28/2025  01:01 PM             9,144 ERROR.md
-11/28/2025  11:43 AM            12,676 fast_api_app.py
-11/28/2025  11:43 AM             7,466 generator.py
-11/28/2025  11:46 AM    <DIR>          images
-11/28/2025  11:43 AM            10,104 LIVRAISON.md
-11/28/2025  11:43 AM            84,448 main.ipynb
-11/28/2025  11:43 AM             1,644 main.py
-11/28/2025  12:16 PM    <DIR>          models
-11/28/2025  11:43 AM             3,566 MODELS_README.md
-11/28/2025  11:46 AM    <DIR>          monitoring
-11/28/2025  11:43 AM             1,815 paths.py
-11/28/2025  11:43 AM            18,473 preprocess.py
-11/28/2025  11:46 AM    <DIR>          preprocessed_data
-11/28/2025  11:43 AM            15,601 preprocess_reset.py
-11/28/2025  12:40 PM             5,859 PUSH_TO_GITHUB.md
-11/28/2025  11:43 AM             5,488 QUICK_START_GITHUB.md
-11/28/2025  11:43 AM               783 rag.yaml
-11/28/2025  11:43 AM             6,354 Readme.md
-11/28/2025  11:43 AM             7,937 README_DEPLOYMENT.md
-11/28/2025  11:43 AM             3,392 redis_db.py
-11/28/2025  11:43 AM             3,270 REORGANIZATION.md
-11/28/2025  11:43 AM               740 requirements.txt
-11/28/2025  11:43 AM               648 reset_collection.py
-11/28/2025  11:43 AM             7,190 retriever.py
-11/28/2025  11:46 AM    <DIR>          scripts
-11/28/2025  11:43 AM             7,050 STATUS.md
-11/28/2025  11:43 AM             1,042 streamlit_app.py
-11/28/2025  11:46 AM    <DIR>          streamlit_pages
-11/28/2025  11:43 AM             8,282 Support.md
-11/28/2025  11:43 AM               385 test_milvus_conn.py
-11/28/2025  11:43 AM             1,128 test_retriever.py
-11/28/2025  11:43 AM             1,553 unit_test.py
-              34 File(s)        248,661 bytes
-              10 Dir(s)  95,340,007,424 bytes free
-
-C:\Users\elhadsey\OneDrive - myidemia\Bureau\irp>
-C:\Users\elhadsey\OneDrive - myidemia\Bureau\irp>
-C:\Users\elhadsey\OneDrive - myidemia\Bureau\irp>dir models
- Volume in drive C is Windows
- Volume Serial Number is AC97-4896
-
- Directory of C:\Users\elhadsey\OneDrive - myidemia\Bureau\irp\models
-
-11/28/2025  12:16 PM    <DIR>          .
-11/28/2025  01:01 PM    <DIR>          ..
-08/12/2025  08:52 AM    <DIR>          all-mpnet-base-v2
-11/28/2025  12:15 PM     2,417,576,480 Llama-3.2-3B-Instruct-Q5_K_L.gguf
-               1 File(s)  2,417,576,480 bytes
-               3 Dir(s)  95,340,298,240 bytes free
-
 C:\Users\elhadsey\OneDrive - myidemia\Bureau\irp>docker build -f Dockerfile.prod -t rag-system:prod .
-[+] Building 1.2s (20/22)                                                                                                                                                                               docker:desktop-linux
+[+] Building 1012.5s (12/22)                                                                                                                                                                            docker:desktop-linux
  => [internal] load build definition from Dockerfile.prod                                                                                                                                                               0.0s
  => => transferring dockerfile: 3.44kB                                                                                                                                                                                  0.0s 
  => WARN: FromAsCasing: 'as' and 'FROM' keywords' casing do not match (line 14)                                                                                                                                         0.0s 
- => [internal] load metadata for docker.io/library/python:3.11-slim                                                                                                                                                     0.6s 
+ => [internal] load metadata for docker.io/library/python:3.11-slim                                                                                                                                                     1.0s 
  => [internal] load .dockerignore                                                                                                                                                                                       0.0s
- => => transferring context: 1.15kB                                                                                                                                                                                     0.0s 
- => [internal] load build context                                                                                                                                                                                       0.0s 
- => => transferring context: 758B                                                                                                                                                                                       0.0s 
+ => => transferring context: 1.44kB                                                                                                                                                                                     0.0s 
  => CACHED [builder 1/7] FROM docker.io/library/python:3.11-slim@sha256:193fdd0bbcb3d2ae612bd6cc3548d2f7c78d65b549fcaa8af75624c47474444d                                                                                0.0s 
+ => [internal] load build context                                                                                                                                                                                     400.8s 
+ => => transferring context: 9.85GB                                                                                                                                                                                   400.7s 
  => CACHED [builder 2/7] WORKDIR /app                                                                                                                                                                                   0.0s 
- => CANCELED [builder 3/7] RUN apt-get update && apt-get install -y     build-essential     wget     git     && rm -rf /var/lib/apt/lists/*                                                                             0.4s 
- => CANCELED [stage-1  2/12] RUN apt-get update && apt-get install -y     libgomp1     curl     && rm -rf /var/lib/apt/lists/*                                                                                          0.4s 
- => CACHED [builder 4/7] COPY requirements.txt .                                                                                                                                                                        0.0s
- => CACHED [builder 5/7] RUN python -m venv /opt/venv                                                                                                                                                                   0.0s 
- => CACHED [builder 6/7] RUN pip install --no-cache-dir --upgrade pip setuptools wheel &&     pip install --no-cache-dir -r requirements.txt                                                                            0.0s 
- => CACHED [builder 7/7] RUN python -m spacy download en_core_web_lg                                                                                                                                                    0.0s 
- => CACHED [stage-1  3/12] COPY --from=builder /opt/venv /opt/venv                                                                                                                                                      0.0s
- => CACHED [stage-1  4/12] RUN useradd -m -u 1000 appuser &&     mkdir -p /app/data /app/uploads /app/preprocessed_data &&     chown -R appuser:appuser /app                                                            0.0s 
- => CACHED [stage-1  5/12] WORKDIR /app                                                                                                                                                                                 0.0s 
- => CACHED [stage-1  6/12] COPY --chown=appuser:appuser *.py ./                                                                                                                                                         0.0s 
- => CACHED [stage-1  7/12] COPY --chown=appuser:appuser streamlit_pages/ ./streamlit_pages/                                                                                                                             0.0s 
- => CACHED [stage-1  8/12] COPY --chown=appuser:appuser .streamlit/ ./.streamlit/                                                                                                                                       0.0s 
- => CACHED [stage-1  9/12] COPY --chown=appuser:appuser requirements.txt ./                                                                                                                                             0.0s 
- => ERROR [stage-1 10/12] COPY --chown=appuser:appuser models/ ./models/                                                                                                                                                0.0s 
+ => [stage-1  2/12] RUN apt-get update && apt-get install -y     libgomp1     curl     && rm -rf /var/lib/apt/lists/*                                                                                                  31.0s 
+ => [builder 3/7] RUN apt-get update && apt-get install -y     build-essential     wget     git     && rm -rf /var/lib/apt/lists/*                                                                                    148.3s 
+ => [builder 4/7] COPY requirements.txt .                                                                                                                                                                               0.4s
+ => [builder 5/7] RUN python -m venv /opt/venv                                                                                                                                                                          5.6s
+ => [builder 6/7] RUN pip install --no-cache-dir --upgrade pip setuptools wheel &&     pip install --no-cache-dir -r requirements.txt                                                                                 598.3s
+ => ERROR [builder 7/7] RUN python -m spacy download en_core_web_lg                                                                                                                                                     6.1s
 ------
- > [stage-1 10/12] COPY --chown=appuser:appuser models/ ./models/:
+ > [builder 7/7] RUN python -m spacy download en_core_web_lg:
+4.813 Traceback (most recent call last):
+4.813   File "/opt/venv/lib/python3.11/site-packages/urllib3/connectionpool.py", line 464, in _make_request
+4.814     self._validate_conn(conn)
+4.814   File "/opt/venv/lib/python3.11/site-packages/urllib3/connectionpool.py", line 1093, in _validate_conn
+4.814     conn.connect()
+4.814   File "/opt/venv/lib/python3.11/site-packages/urllib3/connection.py", line 790, in connect
+4.815     sock_and_verified = _ssl_wrap_socket_and_match_hostname(
+4.815                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+4.815   File "/opt/venv/lib/python3.11/site-packages/urllib3/connection.py", line 969, in _ssl_wrap_socket_and_match_hostname
+4.816     ssl_sock = ssl_wrap_socket(
+4.816                ^^^^^^^^^^^^^^^^
+4.816   File "/opt/venv/lib/python3.11/site-packages/urllib3/util/ssl_.py", line 480, in ssl_wrap_socket
+4.817     ssl_sock = _ssl_wrap_socket_impl(sock, context, tls_in_tls, server_hostname)
+4.817                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+4.817   File "/opt/venv/lib/python3.11/site-packages/urllib3/util/ssl_.py", line 524, in _ssl_wrap_socket_impl
+4.817     return ssl_context.wrap_socket(sock, server_hostname=server_hostname)
+4.817            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+4.817   File "/usr/local/lib/python3.11/ssl.py", line 517, in wrap_socket
+4.818     return self.sslsocket_class._create(
+4.818            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+4.818   File "/usr/local/lib/python3.11/ssl.py", line 1104, in _create
+4.818     self.do_handshake()
+4.818   File "/usr/local/lib/python3.11/ssl.py", line 1382, in do_handshake
+4.819     self._sslobj.do_handshake()
+4.819 ssl.SSLCertVerificationError: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1016)
+4.819
+4.819 During handling of the above exception, another exception occurred:
+4.819
+4.819 Traceback (most recent call last):
+4.819   File "/opt/venv/lib/python3.11/site-packages/urllib3/connectionpool.py", line 787, in urlopen
+4.819     response = self._make_request(
+4.819                ^^^^^^^^^^^^^^^^^^^
+4.819   File "/opt/venv/lib/python3.11/site-packages/urllib3/connectionpool.py", line 488, in _make_request
+4.819     raise new_e
+4.819 urllib3.exceptions.SSLError: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1016)
+4.819
+4.819 The above exception was the direct cause of the following exception:
+4.819
+4.819 Traceback (most recent call last):
+4.819   File "/opt/venv/lib/python3.11/site-packages/requests/adapters.py", line 644, in send
+4.820     resp = conn.urlopen(
+4.820            ^^^^^^^^^^^^^
+4.820   File "/opt/venv/lib/python3.11/site-packages/urllib3/connectionpool.py", line 841, in urlopen
+4.821     retries = retries.increment(
+4.821               ^^^^^^^^^^^^^^^^^^
+4.821   File "/opt/venv/lib/python3.11/site-packages/urllib3/util/retry.py", line 519, in increment
+4.821     raise MaxRetryError(_pool, url, reason) from reason  # type: ignore[arg-type]
+4.821     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+4.821 urllib3.exceptions.MaxRetryError: HTTPSConnectionPool(host='raw.githubusercontent.com', port=443): Max retries exceeded with url: /explosion/spacy-models/master/compatibility.json (Caused by SSLError(SSLCertVerificationError(1, '[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1016)')))
+4.821
+4.821 During handling of the above exception, another exception occurred:
+4.821
+4.821 Traceback (most recent call last):
+4.822   File "<frozen runpy>", line 198, in _run_module_as_main
+4.822   File "<frozen runpy>", line 88, in _run_code
+4.822   File "/opt/venv/lib/python3.11/site-packages/spacy/__main__.py", line 4, in <module>
+4.822     setup_cli()
+4.822   File "/opt/venv/lib/python3.11/site-packages/spacy/cli/_util.py", line 87, in setup_cli
+4.822     command(prog_name=COMMAND)
+4.822   File "/opt/venv/lib/python3.11/site-packages/click/core.py", line 1485, in __call__
+4.823     return self.main(*args, **kwargs)
+4.823            ^^^^^^^^^^^^^^^^^^^^^^^^^^
+4.823   File "/opt/venv/lib/python3.11/site-packages/typer/core.py", line 803, in main
+4.824     return _main(
+4.824            ^^^^^^
+4.824   File "/opt/venv/lib/python3.11/site-packages/typer/core.py", line 192, in _main
+4.824     rv = self.invoke(ctx)
+4.824          ^^^^^^^^^^^^^^^^
+4.824   File "/opt/venv/lib/python3.11/site-packages/click/core.py", line 1873, in invoke
+4.825     return _process_result(sub_ctx.command.invoke(sub_ctx))
+4.825                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+4.825   File "/opt/venv/lib/python3.11/site-packages/click/core.py", line 1269, in invoke
+4.825     return ctx.invoke(self.callback, **ctx.params)
+4.825            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+4.825   File "/opt/venv/lib/python3.11/site-packages/click/core.py", line 824, in invoke
+4.825     return callback(*args, **kwargs)
+4.825            ^^^^^^^^^^^^^^^^^^^^^^^^^
+4.825   File "/opt/venv/lib/python3.11/site-packages/typer/main.py", line 691, in wrapper
+4.827     return callback(**use_params)
+4.827            ^^^^^^^^^^^^^^^^^^^^^^
+4.827   File "/opt/venv/lib/python3.11/site-packages/spacy/cli/download.py", line 45, in download_cli
+4.827     download(model, direct, sdist, url, *ctx.args)
+4.827   File "/opt/venv/lib/python3.11/site-packages/spacy/cli/download.py", line 87, in download
+4.827     compatibility = get_compatibility()
+4.827                     ^^^^^^^^^^^^^^^^^^^
+4.827   File "/opt/venv/lib/python3.11/site-packages/spacy/cli/download.py", line 132, in get_compatibility
+4.827     r = requests.get(about.__compatibility__)
+4.827         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+4.827   File "/opt/venv/lib/python3.11/site-packages/requests/api.py", line 73, in get
+4.828     return request("get", url, params=params, **kwargs)
+4.828            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+4.828   File "/opt/venv/lib/python3.11/site-packages/requests/api.py", line 59, in request
+4.828     return session.request(method=method, url=url, **kwargs)
+4.828            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+4.828   File "/opt/venv/lib/python3.11/site-packages/requests/sessions.py", line 589, in request
+4.829     resp = self.send(prep, **send_kwargs)
+4.829            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+4.829   File "/opt/venv/lib/python3.11/site-packages/requests/sessions.py", line 703, in send
+4.832     r = adapter.send(request, **kwargs)
+4.832         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+4.832   File "/opt/venv/lib/python3.11/site-packages/requests/adapters.py", line 675, in send
+4.832     raise SSLError(e, request=request)
+4.832 requests.exceptions.SSLError: HTTPSConnectionPool(host='raw.githubusercontent.com', port=443): Max retries exceeded with url: /explosion/spacy-models/master/compatibility.json (Caused by SSLError(SSLCertVerificationError(1, '[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1016)')))
 ------
 
  1 warning found (use docker --debug to expand):
  - FromAsCasing: 'as' and 'FROM' keywords' casing do not match (line 14)
-Dockerfile.prod:77
+Dockerfile.prod:38
 --------------------
-  75 |     # =============================================================================
-  76 |     # This is what makes the image self-contained (but larger)
-  77 | >>> COPY --chown=appuser:appuser models/ ./models/
-  78 |
-  79 |     # Verify models are present
+  36 |
+  37 |     # Download spaCy model
+  38 | >>> RUN python -m spacy download en_core_web_lg
+  39 |
+  40 |     # =============================================================================
 --------------------
-ERROR: failed to solve: failed to compute cache key: failed to calculate checksum of ref 5308fb2f-088c-4b1a-a635-9146a2e996e3::3vp4bpfcg26el95ooi9jbo8y3: "/models": not found
+ERROR: failed to solve: process "/bin/sh -c python -m spacy download en_core_web_lg" did not complete successfully: exit code: 1
 
-View build details: docker-desktop://dashboard/build/desktop-linux/desktop-linux/2nqoa5x6s2neclgfafeiv1lle
-
-C:\Users\elhadsey\OneDrive - myidemia\Bureau\irp>
+View build details: docker-desktop://dashboard/build/desktop-linux/desktop-linux/1rhqlx8m44cb6v98owntm2fj3
