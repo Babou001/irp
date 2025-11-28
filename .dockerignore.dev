@@ -1,6 +1,3 @@
-# .dockerignore.prod - For production builds with embedded models
-# This version INCLUDES the models/ directory in the build context
-
 # Git files
 .git
 .gitignore
@@ -33,17 +30,12 @@ ENV/
 
 # Docker files
 Dockerfile
-Dockerfile.prod
 docker-compose.yml
-docker-compose.prod.yml
 .dockerignore
-.dockerignore.prod
 
-# Documentation (keep a lightweight version if needed)
+# Documentation and README
 *.md
-!README.md
 docs/
-scripts/
 
 # Test files
 tests/
@@ -73,15 +65,17 @@ tmp/
 *.sqlite3
 chroma_langchain_db/
 
-# Large data directories (will be mounted as volumes in production)
+# Large data directories (will be mounted as volumes)
+# In dev mode, models are mounted via volume to avoid file locking issues
 data/
 uploads/
 preprocessed_data/
+models/
 
-# NOTE: models/ is NOT excluded - it will be copied into the image!
-
-# Media files (will be mounted if needed)
+# Media files (will be mounted)
 videos/
+images/*.png
+images/*.jpg
 
 # Monitoring configs (will be mounted)
 monitoring/
@@ -97,7 +91,3 @@ monitoring/
 
 # OS files
 Thumbs.db
-
-# Git and version control
-.gitattributes
-REORGANIZATION.md
