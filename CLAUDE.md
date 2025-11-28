@@ -4,22 +4,35 @@
 
 ---
 
-## ❌ PROBLÈME ACTUEL : Restrictions Réseau Entreprise
+## ❌ PROBLÈME ACTUEL : Port 9000 Déjà Utilisé
 
 ### Erreur
 ```
-SSLError: HTTPSConnectionPool(host='raw.githubusercontent.com', port=443):
-certificate verify failed: unable to get local issuer certificate
-RUN python -m spacy download en_core_web_lg
+Error response from daemon: Ports are not available: exposing port TCP 0.0.0.0:9000
+bind: Only one usage of each socket address (protocol/network address/port) is normally permitted.
 ```
 
 ### Cause
-Les PC d'entreprise bloquent le téléchargement du modèle spaCy `en_core_web_lg` pendant le build Docker.
+Le port 9000 (utilisé par Minio) est déjà occupé par un autre processus sur votre PC.
 
-### ✅ Solution : Modèle spaCy SUPPRIMÉ
-**Bonne nouvelle** : Le modèle spaCy n'est **PAS utilisé** dans le code ! La ligne a été retirée du Dockerfile.prod.
+### ✅ Solution : Ports Changés
+Les ports Minio ont été modifiés dans docker-compose.prod.yml :
+- Port 9000 → **9002**
+- Port 9001 → **9003**
 
-**Action requise** : Faites un `git pull` pour récupérer la version corrigée, puis relancez le build.
+**Action requise** :
+```cmd
+cd C:\Users\elhadsey\OneDrive - myidemia\Bureau\irp
+
+REM Arrêter les containers partiellement démarrés
+docker-compose -f docker-compose.prod.yml down
+
+REM Récupérer la version corrigée
+git pull origin main
+
+REM Relancer le démarrage
+docker-compose -f docker-compose.prod.yml up -d
+```
 
 ---
 
@@ -160,6 +173,9 @@ docker system prune -af --volumes
 
 ### ✅ Problème 6 : Restrictions réseau entreprise (spaCy)
 **Solution** : Supprimer `RUN python -m spacy download en_core_web_lg` du Dockerfile.prod (non utilisé)
+
+### ✅ Problème 7 : Port 9000 déjà utilisé
+**Solution** : Changer ports Minio dans docker-compose.prod.yml (9000→9002, 9001→9003)
 
 ---
 

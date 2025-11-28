@@ -41,8 +41,8 @@ services:
       MINIO_ROOT_PASSWORD: minioadmin
     command: server /data --console-address ":9001"
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "9002:9000"  # Changed from 9000:9000 to avoid port conflict
+      - "9003:9001"  # Changed from 9001:9001 to avoid potential conflicts
     volumes:
       - minio_data:/data
     networks:
