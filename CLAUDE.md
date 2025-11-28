@@ -4,24 +4,18 @@
 
 ---
 
-## ❌ PROBLÈME ACTUEL : Module Streamlit Manquant + URL API Incorrecte
+## ❌ PROBLÈME ACTUEL : Variables d'Environnement Redis Manquantes
 
-### Erreur 1
+### Erreur
 ```
-ModuleNotFoundError: No module named 'streamlit_cookies_manager'
-```
-
-### Erreur 2
-```
-Connection refused: Failed to establish a new connection to 127.0.0.1:8000
+redis.exceptions.ConnectionError: Error 111 connecting to 127.0.0.1:6379. Connection refused.
 ```
 
 ### Cause
-1. Le module `streamlit-cookies-manager` manquait dans requirements.txt
-2. Streamlit essayait de se connecter à `127.0.0.1:8000` au lieu de `rag-fastapi:8000` (nom du service Docker)
+Les variables d'environnement `REDIS_HOST` et `REDIS_PORT` n'étaient pas définies pour le service Streamlit dans docker-compose.prod.yml
 
-### ✅ Solution : Rebuild l'Image
-Les fichiers ont été corrigés. **Il faut rebuild l'image Docker** pour inclure les modifications.
+### ✅ Solution : Redémarrer les Containers
+Les variables ont été ajoutées. **Pas besoin de rebuild**, juste redémarrer.
 
 **Action requise** :
 ```cmd
@@ -33,25 +27,14 @@ docker-compose -f docker-compose.prod.yml down
 REM Récupérer la version corrigée
 git pull origin main
 
-REM Switcher les .dockerignore
-ren .dockerignore .dockerignore.dev
-ren .dockerignore.prod .dockerignore
-
-REM Rebuild l'image (important!)
-docker build -f Dockerfile.prod -t rag-system:prod .
-
-REM Restaurer les .dockerignore
-ren .dockerignore .dockerignore.prod
-ren .dockerignore.dev .dockerignore
-
-REM Redémarrer
+REM Redémarrer (pas de rebuild nécessaire!)
 docker-compose -f docker-compose.prod.yml up -d
 
 REM Attendre 2 minutes
 timeout /t 120
 
-REM Tester
-curl http://localhost:8501
+REM Tester l'interface
+start http://localhost:8501
 ```
 
 ---
@@ -202,6 +185,9 @@ docker system prune -af --volumes
 
 ### ✅ Problème 9 : Streamlit ne peut pas joindre FastAPI
 **Solution** : Utiliser variable d'environnement FASTAPI_URL avec nom du service Docker (rag-fastapi:8000)
+
+### ✅ Problème 10 : Streamlit ne peut pas joindre Redis
+**Solution** : Ajouter variables REDIS_HOST et REDIS_PORT dans docker-compose.prod.yml pour Streamlit
 
 ---
 
