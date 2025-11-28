@@ -1,20 +1,36 @@
 # 🤖 Instructions Claude - Résolution Problèmes
 
-**Dernière mise à jour** : 2025-11-28 13:05
+**Dernière mise à jour** : 2025-11-28 13:25
 
 ---
 
-## ❌ Problème Actuel : Docker Build Échoue
+## ❌ PROBLÈME ACTUEL : Restrictions Réseau Entreprise
 
 ### Erreur
+```
+SSLError: HTTPSConnectionPool(host='raw.githubusercontent.com', port=443):
+certificate verify failed: unable to get local issuer certificate
+RUN python -m spacy download en_core_web_lg
+```
+
+### Cause
+Les PC d'entreprise bloquent le téléchargement du modèle spaCy `en_core_web_lg` pendant le build Docker.
+
+### ✅ Solution : Modèle spaCy SUPPRIMÉ
+**Bonne nouvelle** : Le modèle spaCy n'est **PAS utilisé** dans le code ! La ligne a été retirée du Dockerfile.prod.
+
+**Action requise** : Faites un `git pull` pour récupérer la version corrigée, puis relancez le build.
+
+---
+
+## ✅ Problème Résolu : Docker Build Échoue (models/ not found)
+
+### Erreur (résolue)
 ```
 ERROR: failed to solve: failed to compute cache key: failed to calculate checksum of ref: "/models": not found
 ```
 
-### Cause
-Le `.dockerignore` exclut le dossier `models/` → Docker ne voit pas les modèles lors du build production.
-
-### Solution : Switcher les .dockerignore
+### Solution Appliquée : Switcher les .dockerignore
 
 **Commandes Windows CMD** :
 ```cmd
@@ -138,6 +154,12 @@ docker system prune -af --volumes
 
 ### ✅ Problème 4 : Modèle Q4 vs Q5
 **Solution** : Corriger paths.py pour utiliser Q5_K_L
+
+### ✅ Problème 5 : .dockerignore exclut models/
+**Solution** : Switcher entre .dockerignore et .dockerignore.prod pendant le build
+
+### ✅ Problème 6 : Restrictions réseau entreprise (spaCy)
+**Solution** : Supprimer `RUN python -m spacy download en_core_web_lg` du Dockerfile.prod (non utilisé)
 
 ---
 
