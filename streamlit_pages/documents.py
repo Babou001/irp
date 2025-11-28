@@ -1,7 +1,8 @@
 import streamlit as st
 import requests
+import os
 
-FASTAPI_URL = "http://127.0.0.1:8000"
+FASTAPI_URL = os.getenv("FASTAPI_URL", "http://127.0.0.1:8000")
 
 st.page_link("streamlit_pages/home.py", label="Home", icon="🏠")
 st.header("Dataset PDF Documents :file_folder:")

@@ -3,13 +3,14 @@ import streamlit as st
 import requests
 import uuid
 import time
+import os
 from datetime import datetime
 import redis_db
 from streamlit_cookies_manager import EncryptedCookieManager
 
 
-# 
-FASTAPI_URL = "http://127.0.0.1:8000"
+# Use environment variable for FastAPI URL (Docker: rag-fastapi, Local: 127.0.0.1)
+FASTAPI_URL = os.getenv("FASTAPI_URL", "http://127.0.0.1:8000")
 headers = {'User-Agent': 'Mozilla/5.0'}
 
 # Client Redis global

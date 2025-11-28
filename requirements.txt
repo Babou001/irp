@@ -25,6 +25,7 @@ python-multipart
 # Streamlit & UI
 streamlit
 streamlit-pdf-viewer
+streamlit-cookies-manager
 
 # AI/ML packages
 transformers

@@ -2,7 +2,7 @@
 import os, requests, streamlit as st
 from streamlit_pdf_viewer import pdf_viewer   # ou votre composant maison
 
-FASTAPI_URL = "http://127.0.0.1:8000"
+FASTAPI_URL = os.getenv("FASTAPI_URL", "http://127.0.0.1:8000")
 
 # ---------- 1. session_state safe defaults -----------------
 ss = st.session_state
