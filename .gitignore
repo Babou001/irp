@@ -121,3 +121,45 @@ sonarqube-report.json
 .pnpm-store/
 .pnpm-debug.log
 # =============================================================================
+
+# Docker
+docker-compose.override.yml
+.docker/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+venv/
+env/
+ENV/
+.venv
+
+# ML Models (DO NOT COMMIT - Too large for Git)
+models/
+*.gguf
+*.bin
+*.safetensors
+*.onnx
+*.h5
+*.pt
+*.pth
+
+# Jupyter
+*.ipynb_checkpoints/
+*.ipynb
+
+# Database
+*.db
+*.sqlite3
+chroma_langchain_db/
+
+# Backup files
+*.bak
+*.backup

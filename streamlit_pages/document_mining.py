@@ -17,30 +17,39 @@ show_meta = st.sidebar.checkbox("Afficher les métadonnées", value=False)
 
 
 # ---------- 2b.  Mode de recherche ------------------------
-mode = st.sidebar.radio(
-    "Mécanisme de recherche",
-    ["Vector", "Words"],
-    index=0,
-    horizontal=True,
-).lower()   
+mode = None 
 
 # ---------- 3. Zone de requête ------------------------------
 st.page_link("streamlit_pages/home.py", label="Home", icon="🏠")
 query = st.text_input("Entrez votre requête")
 
 if st.button("Chercher") and query.strip():
-    payload = {
-        "query":  query,
-        "mode" : mode
-        
-    }
-    r = requests.post(f"{FASTAPI_URL}/retrieve", json=payload).json()
+    payload = {"query": query}  # 'mode' retiré
 
-    ss.pdf_refs  = r.get("documents", [])
-    ss.metadatas = r.get("metadatas", [])
+    try:
+        r = requests.post(f"{FASTAPI_URL}/retrieve", json=payload, timeout=15)
+    except requests.RequestException as e:
+        st.error(f"Erreur de connexion à l'API /retrieve : {e}")
+        st.stop()
+
+    if not r.ok:
+        # On affiche un aperçu de la réponse pour debug sans casser l'UI
+        preview = (r.text or "")[:300]
+        st.error(f"API /retrieve a échoué ({r.status_code}). Détails: {preview}")
+        st.stop()
+
+    try:
+        data = r.json()
+    except ValueError:
+        st.error("La réponse de l'API /retrieve n'est pas un JSON valide.")
+        st.stop()
+
+    ss.pdf_refs   = data.get("documents", []) or []
+    ss.metadatas  = data.get("metadatas", []) or []
     ss.selected_pdf  = None
     ss.selected_meta = {}
-    st.rerun()                     # relance pour afficher les résultats
+    st.rerun()  # relance pour afficher les résultats
+
 
 # ---------- 4. Affichage des résultats ----------------------
 st.subheader("Documents trouvés")

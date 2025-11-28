@@ -1,73 +1,88 @@
-import paths
+# -*- coding: utf-8 -*-
+"""
+preprocess.py — ingestion RAG avec Milvus (ta fonction d'extraction + skip TOC conservateur)
+
+- TA fonction extract_text_with_layout est intégrée telle quelle (PyMuPDF)
+- is_skippable_page : heuristique CONSERVATRICE (ne skippe que si en-tête explicite)
+- get_text() renvoie toujours (text, meta)
+- chunking: 1200/150
+- normalisation des métadonnées (title/source toujours présents, tout en str)
+- insertion Milvus par fichier (continue si un PDF échoue)
+
+CLI:
+    python preprocess.py preprocess   # indexe tout 'data/'
+    python preprocess.py add_doc      # ingère les nouveaux PDFs depuis 'uploads/'
+"""
+
+from __future__ import annotations
+
 import os
-import shutil
-import pickle
 import re
-from langchain_huggingface import HuggingFaceEmbeddings
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_core.documents import Document
-from time import time
 import sys
-import chromadb
-from langchain_chroma import Chroma
-from chromadb.config import Settings
-from uuid import uuid4
-import pymupdf
+import pickle
+import shutil
+from typing import List, Tuple, Dict, Any
+from collections import defaultdict
+
+# ---- LangChain
+try:
+    from langchain_core.documents import Document
+except Exception:
+    from langchain.schema import Document  # type: ignore
+
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+
+# ---- Milvus
+from pymilvus import utility, Collection
+from pymilvus.exceptions import MilvusException, DataNotMatchException
+
+# ---- Modules locaux
+import paths
+import retriever
+
+from pymilvus import Collection, DataType
+from langchain_milvus import Milvus as LCMilvus  
 
 
-def load_doc(filepath):
-    """Safely open a PDF and return the document object (or None)."""
+# =========================
+# TA FONCTION D'EXTRACTION (ET HELPERS)
+# =========================
+
+# Dépendance requise : pip install "pymupdf>=1.24.0"
+import fitz  # PyMuPDF
+
+def load_doc(filepath: str):
+    """Ouvre le PDF avec PyMuPDF; renvoie l'objet doc ou None en cas d'échec."""
     try:
-        return pymupdf.open(filepath)
+        return fitz.open(filepath)
     except Exception as e:
-        print(f"Failed to load document: {e}")
+        print(f"[PDF][FAIL] cannot open {filepath}: {e}")
         return None
 
-
-def is_skippable_page(page_txt: str) -> bool:
-    """Return *True* if the page looks like Table‑of‑Contents or Update‑History.
-
-    Heuristic:
-    • keyword hit ("table of contents" or "document update history")
-    • OR ≥ 3 dotted‑leader lines that make up ≥ 30 % of the visible lines.
+def is_skippable_page(plain_txt: str) -> bool:
     """
-    # A. direct keyword hit
-    if re.search(r"\b(table\s+of\s+contents)\b",
-                 page_txt, flags=re.I):
-        return True
-
-    # B. dotted‑leader lines like "2.3  Installing …… 17"
-    dot_line_pat = re.compile(r'\.{2,}\s*\d+\s*$')
-    lines = [ln for ln in page_txt.splitlines() if ln.strip()]
-    dot_lines = [ln for ln in lines if dot_line_pat.search(ln)]
-    return len(dot_lines) >= 3 and len(dot_lines) / max(len(lines), 1) >= 0.30
-
-
-def strip_sections(raw_txt: str) -> str:
-    """Fallback regex cleaner (kept for edge‑cases)."""
-    # DOCUMENT UPDATE HISTORY … CLASSIFICATION
-    raw_txt = re.sub(
-        r'DOCUMENT UPDATE HISTORY.*?CLASSIFICATION',
-        '',
-        raw_txt,
-        flags=re.S | re.I
+    Heuristique CONSERVATRICE pour ignorer Table of Contents / Revision History.
+    - On regarde uniquement le DÉBUT de la page (500 premiers caractères).
+    - On cherche des entêtes explicites ; PAS de tests '....' ni du substring 'toc'.
+    """
+    if not plain_txt:
+        return False
+    head = plain_txt.strip()[:500].lower()
+    headings = (
+        "table of contents",
+        "sommaire",
+        "table des matières",
+        "revision history",
+        "historique des révisions",
+        "change log",
+        "document history",
     )
+    return any(h in head for h in headings)
 
-    # Table of contents … 1   Introduction
-    raw_txt = re.sub(
-        r'Table of contents.*?\n1\s+Introduction',
-        '1   Introduction',
-        raw_txt,
-        flags=re.S | re.I
-    )
-
-    # collapse 3+ consecutive blank lines
-    return re.sub(r'\n{3,}', '\n\n', raw_txt)
-
-
-# ────────────────────────────────────────────────────────────
-# Core extractor (minimal changes)
-# ────────────────────────────────────────────────────────────
+def strip_sections(text: str) -> str:
+    """Nettoyage léger optionnel des sections; ici on garde simple."""
+    return text.strip()
 
 def extract_text_with_layout(
     filepath,
@@ -80,8 +95,6 @@ def extract_text_with_layout(
         return ""
 
     meta = doc.metadata
-
-    #print(f"\n\nDocument metadata : \n{doc.metadata}\n\n")
 
     os.makedirs(images_dir, exist_ok=True)
     full_lines = []
@@ -100,7 +113,7 @@ def extract_text_with_layout(
 
         page_dict = page.get_text("dict")
 
-        # text blocks, top‑to‑bottom
+        # text blocks, top-to-bottom
         blocks = sorted(page_dict.get("blocks", []), key=lambda b: b['bbox'][1])
         for block in blocks:
             # process lines within block
@@ -127,127 +140,285 @@ def extract_text_with_layout(
     # join lines & collapse 3+ newlines to 2
     text = "\n".join(full_lines)
     text = re.sub(r"\n{3,}", "\n\n", text)
-    return strip_sections(text) , meta
+    return strip_sections(text), meta
 
-
-# to get the text from file
-def get_text(path):
-    """To get text from PDF file using markitdown package"""
+def get_text(path: str) -> Tuple[str, Dict[str, Any]]:
+    """
+    Utilise TA fonction ci-dessus.
+    Elle peut dans un cas retourner juste "" (string) si doc=None ; on enveloppe pour
+    toujours renvoyer (text, meta: dict).
+    """
     try:
-        return extract_text_with_layout(path)
+        res = extract_text_with_layout(path)
+        if isinstance(res, tuple):
+            text, meta = res
+            return text or "", (meta or {})
+        else:
+            return str(res) or "", {}
     except Exception as e:
-        print(f"Error reading file {path}: {e}")
-        return ""
+        print(f"[EXTRACT][FAIL] {path}: {e}")
+        return "", {}
 
+# =========================
+# Config & utilitaires
+# =========================
 
-def get_all_files(directory=paths.data_path, skip_existing=True):
-    """Returns only new files that have not been processed before."""
-    all_files = []
-    try:
-        processed_files = set(os.listdir(paths.preprocessed_data)) if skip_existing else set()
-        for root, _, files in os.walk(directory):
-            for file in files:
-                if file not in processed_files:
-                    all_files.append(os.path.join(root, file))
-    except Exception as e:
-        print(f"Error accessing directory {directory}: {e}")
-    return all_files
+CHUNK_SIZE = 1200
+CHUNK_OVERLAP = 150
 
+def get_all_files() -> List[str]:
+    """Liste tous les PDF du corpus 'data/'."""
+    base = getattr(paths, "data_path", "data")
+    if not os.path.exists(base):
+        return []
+    files = []
+    for name in os.listdir(base):
+        f = os.path.join(base, name)
+        if os.path.isfile(f) and name.lower().endswith(".pdf"):
+            files.append(os.path.abspath(f))
+    return sorted(files)
 
-def get_chunks(chunk_size=20000, overlap=2000):
-    """To get chunks from text"""
+def sanitize_filename(name: str) -> str:
+    name = os.path.basename(name)
+    return re.sub(r"[^A-Za-z0-9._-]+", "_", name)
+
+# =========================
+# Chunking
+# =========================
+
+def get_chunks(chunk_size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP) -> List[Document]:
+    """Découpe tous les PDF du corpus en chunks Document(page_content, metadata)."""
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=overlap)
-    docs = []
+    docs: List[Document] = []
     files = get_all_files()
-    
+
     for fpath in files:
         text, meta = get_text(fpath)
-        text = text.lower()
         if not text:
+            print(f"[READ][SKIP] empty text: {fpath}")
             continue
-        # Merge absolute path with PDF metadata
-        meta_clean = {k: v for k, v in meta.items() if v}  # drop Nones
+        meta_clean = {k: v for k, v in (meta or {}).items() if v is not None}
+        meta_clean = {str(k): str(v) for k, v in meta_clean.items()}
         meta_clean["source"] = os.path.abspath(fpath)
+        if not meta_clean.get("title"):
+            meta_clean["title"] = os.path.splitext(os.path.basename(fpath))[0]
         docs.append(Document(page_content=text, metadata=meta_clean))
-    
+
     all_splits = text_splitter.split_documents(docs)
-    
-    directory_path = paths.chunks_dir_path
-    file_path = f"{directory_path}/all_splits.pkl"
+
+    # Sauvegarde pickle (debug)
+    directory_path = getattr(paths, "chunks_dir_path", os.path.join("preprocessed", "chunks"))
+    os.makedirs(directory_path, exist_ok=True)
+    file_path = os.path.join(directory_path, "all_splits.pkl")
     try:
-        os.makedirs(directory_path, exist_ok=True)
-        with open(file_path, 'wb') as f:
+        with open(file_path, "wb") as f:
             pickle.dump(all_splits, f)
     except Exception as e:
-        print(f"Error saving chunks to {file_path}: {e}")
-    
+        print(f"[SAVE][WARN] cannot dump chunks to {file_path}: {e}")
+
     return all_splits
 
+# =========================
+# Normalisation & insertion résiliente (Milvus)
+# =========================
+
+def _normalize_doc_metadata(docs: List[Document]) -> List[Document]:
+    """
+    Milvus fige le schéma au 1er insert. Pour éviter 'Insert missed field ...':
+      - cast toutes les valeurs en str
+      - assure 'source' et 'title'
+      - remplit les clés manquantes avec ""
+    """
+    all_keys = set()
+    for d in docs:
+        md = d.metadata or {}
+        d.metadata = {str(k): ("" if v is None else str(v)) for k, v in md.items()}
+        all_keys.update(d.metadata.keys())
+
+    all_keys.update({"source", "title"})
+
+    for d in docs:
+        if not d.metadata.get("source"):
+            d.metadata["source"] = ""
+        if not d.metadata.get("title"):
+            base = os.path.splitext(os.path.basename(d.metadata.get("source", "")))[0]
+            d.metadata["title"] = base or "untitled"
+
+    for d in docs:
+        for k in all_keys:
+            if k not in d.metadata:
+                d.metadata[k] = ""
+
+    return docs
+
+def _group_by_source(docs: List[Document]) -> Dict[str, List[Document]]:
+    groups: Dict[str, List[Document]] = defaultdict(list)
+    for d in docs:
+        src = d.metadata.get("source") or "unknown"
+        groups[src].append(d)
+    return groups
+
+
+
+
+def _normalize_docs_for_collection(vectorstore, collection_name, docs):
+    """
+    Aligne docs.metadata sur le schéma EXISTANT de la collection Milvus :
+    - garde UNIQUEMENT les champs déjà présents dans la collection
+    - remplit les champs manquants avec une valeur par défaut selon dtype
+    """
+    col = Collection(collection_name)
+    # text/vector fields tels que déclarés dans ton vectorstore LangChain
+    text_field = getattr(vectorstore, "text_field", "text")
+    vector_field = getattr(vectorstore, "vector_field", "vector")
+    ignore = {text_field, vector_field, "id", "pk"}
+
+    # map nom_de_champ -> dtype
+    schema_map = {f.name: f.dtype for f in col.schema.fields}
+    required = [name for name in schema_map.keys() if name not in ignore]
+
+    def default_for(dtype):
+        if dtype == DataType.VARCHAR:
+            return ""
+        if dtype in (DataType.INT8, DataType.INT16, DataType.INT32, DataType.INT64):
+            return 0
+        if dtype in (DataType.FLOAT, DataType.DOUBLE):
+            return 0.0
+        if dtype == DataType.BOOL:
+            return False
+        if dtype == DataType.JSON:
+            return {}
+        return ""
+
+    def cast_to_dtype(val, dtype):
+        try:
+            if dtype == DataType.VARCHAR:
+                return "" if val is None else str(val)
+            if dtype in (DataType.INT8, DataType.INT16, DataType.INT32, DataType.INT64):
+                return 0 if val in (None, "") else int(val)
+            if dtype in (DataType.FLOAT, DataType.DOUBLE):
+                return 0.0 if val in (None, "") else float(val)
+            if dtype == DataType.BOOL:
+                if isinstance(val, str):
+                    return val.strip().lower() in ("true", "1", "yes", "y", "t")
+                return bool(val)
+            if dtype == DataType.JSON:
+                return val if isinstance(val, (dict, list)) else {}
+        except Exception:
+            return default_for(dtype)
+        return val
+
+    norm = []
+    for d in docs:
+        md = d.metadata or {}
+        new_md = {}
+        for name in required:
+            dtype = schema_map[name]
+            if name in md:
+                new_md[name] = cast_to_dtype(md.get(name), dtype)
+            else:
+                new_md[name] = default_for(dtype)
+        d.metadata = new_md
+        norm.append(d)
+    return norm
+
+
+def _safe_add_per_source(vectorstore, splits: List[Document]) -> Tuple[int, List[str]]:
+    """
+    Insert par fichier. Si un fichier échoue, on le logge et on continue.
+    Retourne (n_inserted, failed_sources[list]).
+    """
+    inserted, failed = 0, []
+    groups = _group_by_source(splits)
+    for src, docs in groups.items():
+        try:
+            docs = _normalize_doc_metadata(docs)
+            docs = _normalize_docs_for_collection(vectorstore, getattr(paths, "MILVUS_COLLECTION", "rag_docs"), docs)
+            vectorstore.add_documents(docs)  # Milvus auto-id
+            inserted += len(docs)
+        except (DataNotMatchException, MilvusException, Exception) as e:
+            print(f"[Milvus][SKIP] insertion failed for source: {src}\n  -> {e}")
+            failed.append(src)
+    return inserted, failed
+
+# =========================
+# Vectorizer (Milvus)
+# =========================
 
 def get_vectorizer(
-    save_path: str = paths.preprocessed_data,
-    collection_name: str = "rag_docs",
-    host: str = "localhost",
-    port: int = 8010,
-):
+    save_path: str = getattr(paths, "preprocessed_data", "preprocessed"),
+    collection_name: str = getattr(paths, "MILVUS_COLLECTION", "rag_docs"),
+    host: str = getattr(paths, "MILVUS_HOST", "127.0.0.1"),
+    port: int = int(getattr(paths, "MILVUS_PORT", 19530)),
+) -> Any:
     """
-    Connects to (or starts) the Chroma collection that holds your vectors.
-    If the collection is empty it populates it from the PDF corpus.
-    Returns a LangChain-wrapped Chroma vector store so the rest of the
-    codebase continues to work unchanged.
+    Ouvre/crée la collection Milvus et la peuple si vide.
+    Retourne un vectorstore LangChain (Milvus).
     """
     embedding_model = HuggingFaceEmbeddings(model_name=paths.bert_model_path)
+    vectorstore = retriever.load_vectorstore(embedding_model, collection_name=collection_name)
 
-    # 1) Connect to the running Chroma server
-    client = chromadb.HttpClient(
-        host=host,
-        port=port,
-        settings=Settings(anonymized_telemetry=False),
-    )
+    # Est-ce que la collection existe / contient des entités ?
+    try:
+        if not utility.has_collection(collection_name):
+            raise MilvusException(message=f"Collection '{collection_name}' not exist, or schema not ready.")
 
-    # 2) Re-use or create the collection (server-side metadata knows if it exists)
-    collection = client.get_or_create_collection(
-        name=collection_name,
-        metadata={"hnsw:space": "cosine"},          # optional tuning
-    )
+        col = Collection(collection_name)
+        try:
+            col.load()
+        except Exception as e:
+            print(f"[Milvus][WARN] load() failed for '{collection_name}': {e}")
+        n = getattr(col, "num_entities", 0)
+    except Exception as e:
+        print(f"[Milvus] Collection lookup failed ({e}) — treating as empty.")
+        n = 0
 
-    # 3) Wrap it in the LangChain adapter
-    vectorstore = Chroma(
-        client=client,
-        collection_name=collection_name,
-        embedding_function=embedding_model,
-    )
+    # Peupler si vide
+    if n == 0:
+        print(f"[Milvus] Creating collection <{collection_name}> and embedding all documents …")
+        all_splits = get_chunks(chunk_size=CHUNK_SIZE, overlap=CHUNK_OVERLAP)
+        if all_splits:
+            # 1) uniformiser les métadatas pour un schéma stable
+            all_splits = _normalize_doc_metadata(all_splits)
 
-    # 4) First-run bootstrap: load documents only if the DB is still empty
-    if collection.count() == 0:
-        print("Creating Chroma collection and embedding all documents …")
-        all_splits = get_chunks()
-        ids = [str(uuid4()) for _ in range(len(all_splits))]
-        vectorstore.add_documents(all_splits, ids=ids)
-        print(f"{len(all_splits)} chunks inserted in collection ‹{collection_name}›")
-
+            # 2) création *explicite* de la collection + insert initial
+            try:
+                vectorstore = LCMilvus.from_documents(
+                    documents=all_splits,
+                    embedding=embedding_model,                        # NB: param s’appelle 'embedding'
+                    connection_args={"uri": paths.MILVUS_URI},        # <<— URI
+                    collection_name=collection_name,
+                    index_params={"index_type": "HNSW", "metric_type": "COSINE", "params": {"M": 16, "efConstruction": 200}},
+                    search_params={"metric_type": "COSINE", "params": {"ef": 128}},
+                    drop_old=False,
+                )
+                print(f"[Milvus] Inserted {len(all_splits)} chunks (new collection).")
+            except Exception as e:
+                print(f"[Milvus][ERROR] initial creation failed: {e}")
+        else:
+            print("[Milvus] No chunks to insert (corpus empty?).")
     else:
-        print(f"Using existing Chroma collection ‹{collection_name}› "
-              f"({collection.count()} chunks)")
+        print(f"[Milvus] Using existing collection <{collection_name}> ({n} vectors)")
 
     return vectorstore
 
-
+# =========================
+# Ajout de nouveaux documents depuis 'uploads/'
+# =========================
 
 def add_documents(
-    upload_directory: str = paths.upload_dir_path,
-    collection_name: str = "rag_docs",
-    host: str = "localhost",
-    port: int = 8010,
-):
+    upload_directory: str = getattr(paths, "upload_dir_path", "uploads"),
+    collection_name: str = getattr(paths, "MILVUS_COLLECTION", "rag_docs"),
+    host: str = getattr(paths, "MILVUS_HOST", "127.0.0.1"),
+    port: int = int(getattr(paths, "MILVUS_PORT", 19530)),
+) -> None:
     """
     Embeds only the *new* PDFs present in `upload_directory`
-    and appends them to the shared Chroma collection.
+    and appends them to the Milvus collection.
     """
     try:
-        existing_files = set(os.listdir(paths.data_path)) \
-                         if os.path.exists(paths.data_path) else set()
-        new_files = [f for f in os.listdir(upload_directory) if f not in existing_files]
+        existing_files = set(os.listdir(paths.data_path)) if os.path.exists(paths.data_path) else set()
+        new_files = [f for f in os.listdir(upload_directory) if f.lower().endswith(".pdf") and f not in existing_files]
 
         if not new_files:
             print("No new documents to process.")
@@ -255,17 +426,23 @@ def add_documents(
 
         print(f"Processing {len(new_files)} new documents …")
 
-        # ------------------------------------------------------------------ #
-        # 1) Read & split the new PDFs
-        # ------------------------------------------------------------------ #
-        splitter = RecursiveCharacterTextSplitter(chunk_size=20000, chunk_overlap=2000)
-        new_docs = []
+        splitter = RecursiveCharacterTextSplitter(chunk_size=CHUNK_SIZE, chunk_overlap=CHUNK_OVERLAP)
+        new_docs: List[Document] = []
         for fname in new_files:
-            raw = get_text(os.path.join(upload_directory, fname))
-            if raw:
-                new_docs.append(
-                    Document(page_content=raw, metadata={"source": fname})
-                )
+            fpath = os.path.join(upload_directory, fname)
+            try:
+                text, meta = get_text(fpath)
+                if not text:
+                    print(f"[READ][SKIP] empty text: {fpath}")
+                    continue
+                meta_clean = {k: v for k, v in (meta or {}).items() if v is not None}
+                meta_clean = {str(k): str(v) for k, v in meta_clean.items()}
+                meta_clean["source"] = os.path.abspath(os.path.join(paths.data_path, fname))
+                if not meta_clean.get("title"):
+                    meta_clean["title"] = os.path.splitext(os.path.basename(meta_clean["source"]))[0]
+                new_docs.append(Document(page_content=text, metadata=meta_clean))
+            except Exception as e:
+                print(f"[READ][SKIP] failed to parse {fpath}: {e}")
 
         if not new_docs:
             print("No readable text found in the uploaded files.")
@@ -273,25 +450,17 @@ def add_documents(
 
         new_splits = splitter.split_documents(new_docs)
 
-        # ------------------------------------------------------------------ #
-        # 2) Connect to Chroma and append embeddings
-        # ------------------------------------------------------------------ #
+        # Append résilient par fichier
         embedding_model = HuggingFaceEmbeddings(model_name=paths.bert_model_path)
-        client = chromadb.HttpClient(host=host, port=port,
-                                     settings=Settings(anonymized_telemetry=False))
-        vectorstore = Chroma(
-            client=client,
-            collection_name=collection_name,
-            embedding_function=embedding_model,
-        )
+        vectorstore = retriever.load_vectorstore(embedding_model, collection_name=collection_name)
+        n, failed = _safe_add_per_source(vectorstore, new_splits)
+        print(f"Added {n} chunks from {len(new_docs)} file(s) to Milvus.")
+        if failed:
+            print("[Milvus] The following sources failed and were skipped:")
+            for s in failed:
+                print("  -", s)
 
-        ids = [str(uuid4()) for _ in range(len(new_splits))]
-        vectorstore.add_documents(new_splits, ids=ids)
-        print(f"Added {len(new_splits)} chunks from {len(new_docs)} file(s) to Chroma.")
-
-        # ------------------------------------------------------------------ #
-        # 3) Move the PDFs into your long-term data folder
-        # ------------------------------------------------------------------ #
+        # Déplacer vers data/
         for fname in new_files:
             try:
                 shutil.move(
@@ -299,33 +468,29 @@ def add_documents(
                     os.path.join(paths.data_path, fname)
                 )
             except Exception as e:
-                print(f"Error moving file {fname} → {paths.data_path}: {e}")
+                print(f"[MOVE][WARN] {fname} -> {paths.data_path}: {e}")
 
     except Exception as e:
-        print(f"Error adding documents: {e}")
+        print(f"[ADD][ERROR] {e}")
 
+# =========================
+# CLI
+# =========================
 
-execution_type = sys.argv[1]
+def _usage():
+    print("Usage:")
+    print("  python preprocess.py preprocess   # indexe tout le dossier data/")
+    print("  python preprocess.py add_doc      # ingère les nouveaux PDF depuis uploads/")
 
-if execution_type == "preprocess" :
-    start = time() 
-    get_vectorizer()
-    end = time()
-    duration = end -start 
-    m, s = divmod(duration, 60)
-    print(f"Time for preprocessing : {int(m)}:{int(s):02d}")
+if __name__ == "__main__":
+    if len(sys.argv) < 2:
+        _usage()
+        sys.exit(0)
 
-
-elif execution_type == "add_doc" : 
-    start = time() 
-    add_documents()
-    end = time()
-    duration = end -start 
-    m, s = divmod(duration, 60)
-    print(f"Time for adding documents : {int(m)}:{int(s):02d}")
-    
-
-
-else : 
-    print("Parameter would be 'preprocess' or 'add_doc'" \
-    "\n\nExample : for data preprocessing -------->  python preprocess.py preprocess")
+    cmd = sys.argv[1].strip().lower()
+    if cmd == "preprocess":
+        get_vectorizer()
+    elif cmd == "add_doc":
+        add_documents()
+    else:
+        _usage()

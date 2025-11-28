@@ -1,39 +1,43 @@
 from redis import Redis, ConnectionPool
 import json
-from langchain_core.messages import HumanMessage, SystemMessage, AIMessage  # Assurez-vous que AIMessage est défini
-
-# Configuration de la connexion Redis.
-# Pour la confidentialité, vous pouvez activer TLS ou utiliser des ACLs dans votre configuration Redis.
+import os
+from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
+from datetime import datetime, timezone
 
 def create_redis_client():
-    pool = ConnectionPool(host='127.0.0.1', port=6379, max_connections=100, decode_responses=True)
+    redis_host = os.getenv('REDIS_HOST', '127.0.0.1')
+    redis_port = int(os.getenv('REDIS_PORT', '6379'))
+    pool = ConnectionPool(host=redis_host, port=redis_port, max_connections=100, decode_responses=True)
     return Redis(connection_pool=pool)
-
 
 class RedisChatMessageHistory:
     """
-    Classe pour gérer l’historique des messages d’une session via Redis.
-    Chaque message est stocké dans une liste sous la clé "chat_history:<session_id>".
+    Historique des messages d'une session via Redis, avec prise en charge
+    de la durée des réponses assistant et TTL glissant optionnel.
     """
-    def __init__(self, session_id: str, redis_client: Redis):
+    def __init__(self, session_id: str, redis_client: Redis, ttl_seconds: int | None = None):
         self.session_id = session_id
         self.redis_client = redis_client
         self.key = f"chat_history:{session_id}"
-    
+        self.ttl_seconds = ttl_seconds
+
+    def _push(self, data: dict):
+        self.redis_client.rpush(self.key, json.dumps(data))
+        if self.ttl_seconds:
+            # TTL "glissant" : on renouvelle à chaque insertion
+            self.redis_client.expire(self.key, self.ttl_seconds)
+
     def get_messages(self):
-        """Récupère l’ensemble des messages depuis Redis."""
+        """Reconstruit des objets LangChain à partir du JSON stocké."""
         messages = []
         for message_json in self.redis_client.lrange(self.key, 0, -1):
             data = json.loads(message_json)
             role = data.get("role")
-            content = data.get("content")
+            content = data.get("content", "")
             if role == "system":
                 msg = SystemMessage(content=content)
-            elif role == "user":
-                msg = HumanMessage(content=content)
             elif role == "assistant":
                 msg = AIMessage(content=content)
-                # si on a enregistré la durée, on l’attache à l’objet
                 if "duration" in data:
                     setattr(msg, "duration", data["duration"])
             else:
@@ -43,11 +47,10 @@ class RedisChatMessageHistory:
 
     @property
     def messages(self):
-        """Permet d’accéder aux messages comme à une propriété (pour compatibilité avec votre code existant)."""
         return self.get_messages()
-    
+
     def add_message(self, message):
-        """Ajoute un message à l’historique dans Redis."""
+        """Ajoute un message LangChain, en conservant la durée si présente."""
         if isinstance(message, SystemMessage):
             role = "system"
         elif isinstance(message, HumanMessage):
@@ -56,17 +59,30 @@ class RedisChatMessageHistory:
             role = "assistant"
         else:
             role = "unknown"
-        data = {"role": role, "content": message.content}
-        # La commande RPush est atomique sur Redis.
-        self.redis_client.rpush(self.key, json.dumps(data))
-    
-    def add_ai_message(self, content: str):
-        """Méthode utilitaire pour ajouter un message de l'assistant."""
-        ai_msg = AIMessage(content=content)
-        self.add_message(ai_msg)
 
-def get_chat_history(redis_cl, session_id: str) -> RedisChatMessageHistory:
-    """
-    Récupère (ou crée) l'historique de chat pour une session donnée via Redis.
-    """
-    return RedisChatMessageHistory(session_id, redis_cl)
+        data = {
+            "role": role,
+            "content": message.content,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        dur = getattr(message, "duration", None)
+        if dur is not None:
+            data["duration"] = float(dur)
+        self._push(data)
+
+    def add_ai_message(self, content: str, duration: float | None = None):
+        """Utilitaire explicite pour les réponses assistant."""
+        data = {
+            "role": "assistant",
+            "content": content,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        if duration is not None:
+            data["duration"] = float(duration)
+        self._push(data)
+
+    def clear(self):
+        self.redis_client.delete(self.key)
+
+def get_chat_history(redis_cl, session_id: str, ttl_seconds: int | None = None) -> RedisChatMessageHistory:
+    return RedisChatMessageHistory(session_id, redis_cl, ttl_seconds=ttl_seconds)

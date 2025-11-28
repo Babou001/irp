@@ -1,0 +1,103 @@
+# .dockerignore.prod - For production builds with embedded models
+# This version INCLUDES the models/ directory in the build context
+
+# Git files
+.git
+.gitignore
+.gitattributes
+
+# Python cache
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info
+dist/
+build/
+*.egg
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Docker files
+Dockerfile
+Dockerfile.prod
+docker-compose.yml
+docker-compose.prod.yml
+.dockerignore
+.dockerignore.prod
+
+# Documentation (keep a lightweight version if needed)
+*.md
+!README.md
+docs/
+scripts/
+
+# Test files
+tests/
+test_*.py
+*_test.py
+pytest.ini
+.pytest_cache/
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+
+# Jupyter notebooks
+*.ipynb
+.ipynb_checkpoints/
+
+# Temporary files
+*.log
+*.tmp
+*.temp
+temp/
+tmp/
+
+# Database files (will be mounted as volumes)
+*.db
+*.sqlite3
+chroma_langchain_db/
+
+# Large data directories (will be mounted as volumes in production)
+data/
+uploads/
+preprocessed_data/
+
+# NOTE: models/ is NOT excluded - it will be copied into the image!
+
+# Media files (will be mounted if needed)
+videos/
+
+# Monitoring configs (will be mounted)
+monitoring/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Backup files
+*.bak
+*.backup
+
+# OS files
+Thumbs.db
+
+# Git and version control
+.gitattributes
+REORGANIZATION.md

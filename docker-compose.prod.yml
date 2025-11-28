@@ -1,0 +1,215 @@
+# =============================================================================
+# docker-compose.prod.yml - Production deployment configuration
+# =============================================================================
+# This configuration uses pre-built images with embedded models.
+# Perfect for air-gapped/restricted enterprise environments.
+#
+# Usage:
+#   1. Build images: ./scripts/build-production-image.sh
+#   2. Deploy: docker-compose -f docker-compose.prod.yml up -d
+#   3. Monitor: http://localhost:3000 (Grafana: admin/admin123)
+# =============================================================================
+
+services:
+  # ========== Milvus dependencies ==========
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.12
+    container_name: milvus-etcd
+    environment:
+      ETCD_AUTO_COMPACTION_MODE: revision
+      ETCD_AUTO_COMPACTION_RETENTION: "1000"
+      ETCD_QUOTA_BACKEND_BYTES: "4294967296"
+      ETCD_SNAPSHOT_COUNT: "50000"
+      ETCD_LISTEN_CLIENT_URLS: "http://0.0.0.0:2379"
+      ETCD_ADVERTISE_CLIENT_URLS: "http://milvus-etcd:2379"
+    volumes:
+      - etcd_data:/etcd
+    networks:
+      - rag-network
+    healthcheck:
+      test: ["CMD", "etcdctl", "endpoint", "health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:RELEASE.2024-05-28T17-19-04Z
+    container_name: milvus-minio
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    networks:
+      - rag-network
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  milvus:
+    image: milvusdb/milvus:v2.4.11
+    container_name: milvus-standalone
+    depends_on:
+      etcd:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    environment:
+      MILVUS_LOG_LEVEL: info
+      ETCD_ENDPOINTS: milvus-etcd:2379
+      MINIO_ADDRESS: milvus-minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_USE_SSL: "false"
+    ports:
+      - "19530:19530"
+      - "9091:9091"
+    volumes:
+      - milvus_data:/var/lib/milvus
+    command: ["milvus", "run", "standalone"]
+    networks:
+      - rag-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+    restart: unless-stopped
+
+  # ========== Redis for chat history ==========
+  redis:
+    image: redis:7-alpine
+    container_name: rag-redis
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - rag-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  # ========== FastAPI backend (PRODUCTION) ==========
+  fastapi:
+    image: rag-system:prod  # Pre-built image with embedded models
+    container_name: rag-fastapi
+    depends_on:
+      milvus:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      - MILVUS_HOST=milvus-standalone
+      - MILVUS_PORT=19530
+      - MILVUS_COLLECTION=rag_docs
+    volumes:
+      # Mount only user data (NOT models - they're in the image)
+      - ./data:/app/data
+      - ./uploads:/app/uploads
+      - ./preprocessed_data:/app/preprocessed_data
+    ports:
+      - "8000:8000"
+    networks:
+      - rag-network
+    command: uvicorn fast_api_app:app --host 0.0.0.0 --port 8000 --workers 1
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+
+  # ========== Streamlit frontend (PRODUCTION) ==========
+  streamlit:
+    image: rag-system:prod  # Same image, different command
+    container_name: rag-streamlit
+    depends_on:
+      fastapi:
+        condition: service_healthy
+    environment:
+      - FASTAPI_URL=http://rag-fastapi:8000
+      - MILVUS_HOST=milvus-standalone
+      - MILVUS_PORT=19530
+    volumes:
+      - ./data:/app/data
+      - ./uploads:/app/uploads
+      - ./preprocessed_data:/app/preprocessed_data
+      - ./images:/app/images
+      - ./videos:/app/videos
+    ports:
+      - "8501:8501"
+    networks:
+      - rag-network
+    command: streamlit run streamlit_app.py --server.address=0.0.0.0 --server.port=8501
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+
+  # ========== Prometheus for metrics ==========
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: rag-prometheus
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    ports:
+      - "9090:9090"
+    networks:
+      - rag-network
+    restart: unless-stopped
+
+  # ========== Grafana for visualization ==========
+  grafana:
+    image: grafana/grafana:latest
+    container_name: rag-grafana
+    depends_on:
+      - prometheus
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=http://localhost:3000
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+    ports:
+      - "3000:3000"
+    networks:
+      - rag-network
+    restart: unless-stopped
+
+networks:
+  rag-network:
+    driver: bridge
+
+volumes:
+  etcd_data:
+  minio_data:
+  milvus_data:
+  redis_data:
+  prometheus_data:
+  grafana_data:

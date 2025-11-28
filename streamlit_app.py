@@ -2,6 +2,8 @@ import streamlit as st
 import paths
 
 
+st.set_page_config(page_title="IDEMIA RAG Project", page_icon=":robot_face:")
+
 
 # Main pages
 home_page            = st.Page("streamlit_pages/home.py",            title="Home",           icon=":material/home:",       default=True)
@@ -20,7 +22,6 @@ pg = st.navigation({
 position="hidden" 
     )
 
-st.set_page_config(page_title="IDEMIA RAG Project", page_icon=":robot_face:")
 
 st.logo(image=paths.image_logo, size="large")
 

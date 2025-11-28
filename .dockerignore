@@ -1,0 +1,93 @@
+# Git files
+.git
+.gitignore
+.gitattributes
+
+# Python cache
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info
+dist/
+build/
+*.egg
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Docker files
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Documentation and README
+*.md
+docs/
+
+# Test files
+tests/
+test_*.py
+*_test.py
+pytest.ini
+.pytest_cache/
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+
+# Jupyter notebooks
+*.ipynb
+.ipynb_checkpoints/
+
+# Temporary files
+*.log
+*.tmp
+*.temp
+temp/
+tmp/
+
+# Database files (will be mounted as volumes)
+*.db
+*.sqlite3
+chroma_langchain_db/
+
+# Large data directories (will be mounted as volumes)
+# In dev mode, models are mounted via volume to avoid file locking issues
+data/
+uploads/
+preprocessed_data/
+models/
+
+# Media files (will be mounted)
+videos/
+images/*.png
+images/*.jpg
+
+# Monitoring configs (will be mounted)
+monitoring/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Backup files
+*.bak
+*.backup
+
+# OS files
+Thumbs.db
